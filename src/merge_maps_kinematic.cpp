@@ -318,30 +318,33 @@ void MergeMapsKinematic::processInteractiveFeedback(
 {
   const int id = std::stoi(feedback->marker_name, nullptr, 10);
 
+  tf2::Quaternion quat(feedback->pose.orientation.x,
+    feedback->pose.orientation.y,
+    feedback->pose.orientation.z,
+    feedback->pose.orientation.w);
+  
   if (feedback->event_type ==
     visualization_msgs::msg::InteractiveMarkerFeedback::MOUSE_UP &&
     feedback->mouse_point_valid)
   {
     tf2Scalar yaw = tf2::getYaw(feedback->pose.orientation);
-    tf2::Quaternion quat(0., 0., 0., 1.0);
     tf2::fromMsg(feedback->pose.orientation, quat);  // relative
 
     tf2::Transform previous_submap_correction;
     previous_submap_correction.setIdentity();
     previous_submap_correction.setOrigin(tf2::Vector3(submap_locations_[id](0),
       submap_locations_[id](1), 0.));
-
+    previous_submap_correction.setRotation(submap_marker_transform_[id].getRotation());
     // update internal knowledge of submap locations
     submap_locations_[id] = Eigen::Vector3d(feedback->pose.position.x,
         feedback->pose.position.y,
-        submap_locations_[id](2) + yaw);
+        0.0);
 
     // add the map_N frame there
     tf2::Transform new_submap_location;
-    new_submap_location.setOrigin(tf2::Vector3(submap_locations_[id](0),
-      submap_locations_[id](1), 0.));
+    new_submap_location.setOrigin(tf2::Vector3(feedback->pose.position.x,
+      feedback->pose.position.y, 0.));
     new_submap_location.setRotation(quat);
-
     geometry_msgs::msg::TransformStamped msg;
     msg.transform = tf2::toMsg(new_submap_location);
     msg.child_frame_id = "/map_" + std::to_string(id);
@@ -349,15 +352,13 @@ void MergeMapsKinematic::processInteractiveFeedback(
     msg.header.stamp = this->now();
     tfB_->sendTransform(msg);
 
-    submap_marker_transform_[id] = submap_marker_transform_[id] *
-      previous_submap_correction.inverse() * new_submap_location;
+    submap_marker_transform_[id] = new_submap_location;
   }
 
   if (feedback->event_type ==
     visualization_msgs::msg::InteractiveMarkerFeedback::POSE_UPDATE)
   {
     tf2Scalar yaw = tf2::getYaw(feedback->pose.orientation);
-    tf2::Quaternion quat(0., 0., 0., 1.0);
     tf2::fromMsg(feedback->pose.orientation, quat);  // relative
 
     // add the map_N frame there
@@ -373,6 +374,7 @@ void MergeMapsKinematic::processInteractiveFeedback(
     msg.header.stamp = this->now();
     tfB_->sendTransform(msg);
   }
+  this->mergeMapCallback(nullptr, nullptr, nullptr);
 }
 
 /*****************************************************************************/
